@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 
 #if DEBUG
+@available(iOS 13.0, tvOS 13.0, *)
 public extension SwiftUI.View {
     func enableInjection() -> some SwiftUI.View {
         _ = Inject.load
@@ -12,7 +13,7 @@ public extension SwiftUI.View {
     }
 
     func onInjection(callback: @escaping (Self) -> Void) -> some SwiftUI.View {
-        onReceive(Inject.observer.objectWillChange, perform: {
+        onReceive(Inject.combineObserver.objectWillChange, perform: {
             callback(self)
         })
         .enableInjection()

@@ -23,11 +23,15 @@ extension Inject {
 @dynamicMemberLookup
 public class _InjectableViewControllerHost<Hosted: InjectViewControllerType>: InjectViewControllerType {
     public private(set) var instance: Hosted
+    private var configuration: ((Hosted) -> Void)?
     let constructor: () -> Hosted
     
-    public init(_ constructor: @autoclosure @escaping () -> Hosted) {
+    public init(_ constructor: @autoclosure @escaping () -> Hosted,
+                configuration: ((Hosted) -> Void)? = nil) {
         instance = constructor()
+        configuration?(instance)
         self.constructor = constructor
+        self.configuration = configuration
         
         super.init(nibName: nil, bundle: nil)
         self.enableInjection()
@@ -51,6 +55,7 @@ public class _InjectableViewControllerHost<Hosted: InjectViewControllerType>: In
         instance.removeFromParent()
         
         instance = constructor()
+        configuration?(instance)
         addAsChild()
     }
     

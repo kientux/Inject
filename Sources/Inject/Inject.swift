@@ -14,7 +14,13 @@ public protocol InjectListener {
 /// Public namespace for using Inject API
 public enum Inject {
     public static let observer = injectionObserver
+    
+    @available(iOS 13.0, tvOS 13.0, *)
+    public static let combineObserver = injectionCombineObserver
+    
     public static let load: Void = loadInjectionImplementation
+    
+    @available(iOS 13.0, tvOS 13.0, *)
     public static var animation: SwiftUI.Animation?
 }
 
@@ -41,10 +47,46 @@ private var loadInjectionImplementation: Void = {
     Bundle(path: "/Applications/InjectionIII.app/Contents/Resources/" + bundleName)?.load()
 }()
 
-public class InjectionObserver: ObservableObject {
+public class InjectionObserver: NSObject {
+    private var observer: NSObjectProtocol?
+    private var callbacks: [() -> Void] = []
+    
+    func addCallback(_ callback: @escaping () -> Void) {
+        callbacks.append(callback)
+    }
+
+    fileprivate override init() {
+        super.init()
+        
+        observer = NotificationCenter.default.addObserver(
+            forName: Notification.Name("INJECTION_BUNDLE_NOTIFICATION"),
+            object: nil,
+            queue: .main,
+            using: { [weak self] _ in
+                if #available(iOS 13.0, tvOS 13.0, *) {
+                    if let animation = Inject.animation {
+                        withAnimation(animation) {
+                            self?.call()
+                        }
+                    } else {
+                        self?.call()
+                    }
+                } else {
+                    self?.call()
+                }
+        })
+    }
+    
+    private func call() {
+        callbacks.forEach({ $0() })
+    }
+}
+
+@available(iOS 13.0, tvOS 13.0, *)
+public class InjectionCombineObserver: ObservableObject {
     @Published public private(set) var injectionNumber = 0
     private var cancellable: AnyCancellable?
-
+    
     fileprivate init() {
         cancellable = NotificationCenter.default.publisher(for: Notification.Name("INJECTION_BUNDLE_NOTIFICATION"))
             .sink { [weak self] _ in
@@ -60,22 +102,35 @@ public class InjectionObserver: ObservableObject {
 }
 
 private let injectionObserver = InjectionObserver()
+@available(iOS 13.0, tvOS 13.0, *)
+private let injectionCombineObserver = InjectionCombineObserver()
 private var injectionObservationKey = arc4random()
 
 public extension InjectListener where Self: NSObject {
     func onInjection(callback: @escaping (Self) -> Void) {
-        let observation = injectionObserver.objectWillChange.sink(receiveValue: { [weak self] in
-            guard let self = self else { return }
-            callback(self)
-        })
-
-        objc_setAssociatedObject(self, &injectionObservationKey, observation, .OBJC_ASSOCIATION_RETAIN)
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            let observation = injectionCombineObserver.objectWillChange.sink(receiveValue: { [weak self] in
+                guard let self = self else { return }
+                callback(self)
+            })
+            
+            objc_setAssociatedObject(self, &injectionObservationKey, observation, .OBJC_ASSOCIATION_RETAIN)
+        } else {
+            injectionObserver.addCallback { [weak self] in
+                guard let self = self else { return }
+                callback(self)
+            }
+        }
     }
 }
 
 #else
-public class InjectionObserver: ObservableObject {}
+public class InjectionObserver: NSObject {}
 private let injectionObserver = InjectionObserver()
+@available(iOS 13.0, tvOS 13.0, *)
+public class InjectionCombineObserver: ObservableObject {}
+@available(iOS 13.0, tvOS 13.0, *)
+private let injectionCombineObserver = InjectionCombineObserver()
 private var loadInjectionImplementation: Void = {}()
 
 public extension InjectListener where Self: NSObject {
